@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Interactive Portfolio</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://threejs.org/build/three.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/110/three.min.js"></script>
+    <script>
+        // Scene
+        const scene = new THREE.Scene();
+
+        // Camera
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Resize listener
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        });
+
+        // Light
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        scene.add(directionalLight);
+
+        // Car object
+        const carGeometry = new THREE.BoxGeometry();
+        const carMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const car = new THREE.Mesh(carGeometry, carMaterial);
+        scene.add(car);
+
+        // Plane for the ground
+        const planeGeometry = new THREE.PlaneGeometry(100, 100);
+        const planeMaterial = new THREE.MeshPhongMaterial({ color: 0x7BC8A4, side: THREE.DoubleSide });
+        const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+        plane.rotation.x = -Math.PI / 2; // Rotate to be flat
+        scene.add(plane);
+
+        // Set initial position for the car
+        car.position.y = 0.5; // Lift car slightly above ground
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Handle user input for car movement
+            const speed = 0.1;
+            const moveDistance = speed * 0.1;
+
+            if (keys['W']) car.translateZ(-moveDistance); // Move forward
+            if (keys['S']) car.translateZ(moveDistance); // Move backward
+            if (keys['A']) car.translateX(-moveDistance); // Strafe left
+            if (keys['D']) car.translateX(moveDistance); // Strafe right
+
+            renderer.render(scene, camera);
+        }
+
+        // Keyboard input handling
+        const keys = {};
+        document.addEventListener('keydown', (e) => { keys[e.key] = true; });
+        document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+        // Start animation loop
+        animate();
+    </script>
+</body>
+</html>
