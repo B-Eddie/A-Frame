@@ -1,20 +1,93 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Car Example with Realistic Controls</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tennis Game :D</title>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://cdn.rawgit.com/donmccurdy/aframe-physics-system/v3.3.0/dist/aframe-physics-system.min.js"></script>
+  <style>
+    body { margin: 0; }
+    canvas { display: block; }
+  </style>
 </head>
 <body>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
+  <a-scene cursor="rayOrigin: mouse" physics="debug: true">
+    <a-assets>
+      <!-- Load your GLTF models -->
+      <a-asset-item id="tennisRacketModel" src="tennis_racket.glb"></a-asset-item>
+      <a-asset-item id="tennisCourtModel" src="tennis_court.glb"></a-asset-item>
+    </a-assets>
+
+    <a-entity id="cameraRig" position="0 1.6 0" movement-controls>
+      <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
+      <!-- Tennis racket with follow-mouse -->
+      <a-entity id="tennisRacket" gltf-model="#tennisRacketModel" follow-mouse position="0 0 -1"></a-entity>
+    </a-entity>
+
+    <a-sky color="#87CEEB"></a-sky>
+
+    <a-entity id="tennisCourt" gltf-model="#tennisCourtModel" position="0 0 -5"></a-entity>
+    <a-entity id="tennisBall" geometry="primitive: sphere; radius: 0.1" material="color: yellow" dynamic-body ball-controller position="0 1.5 -4"></a-entity>
+  </a-scene>
+
+  <script>
+    AFRAME.registerComponent('follow-mouse', {
+      schema: { type: 'vec3' },
+      init: function () {
+        this.el.sceneEl.canvas.addEventListener('click', () => {
+          this.el.sceneEl.canvas.requestPointerLock();
+        });
+        this.mouse = { x: 0, y: 0 };
+        this.el.sceneEl.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
+      },
+      onMouseMove: function (event) {
+        if (document.pointerLockElement === this.el.sceneEl.canvas) {
+          this.mouse.x += event.movementX;
+          this.mouse.y += event.movementY;
         }
-    </style>
+      },
+      tick: function () {
+        const camera = this.el.sceneEl.camera;
+        const racket = this.el;
+        const cameraRig = document.getElementById('cameraRig');
+        const position = new THREE.Vector3();
+        
+        position.set(this.mouse.x * 20, -this.mouse.y * 20, -1).unproject(camera); // change sensitivity here
+        position.add(cameraRig.object3D.position);
+        racket.object3D.position.copy(position);
+      }
+    });
+
+    AFRAME.registerComponent('ball-controller', {
+      init: function () {
+        this.el.addEventListener('collide', this.onCollide.bind(this));
+      },
+      onCollide: function (e) {
+        if (e.detail.body.el.id === 'tennisRacket') {
+          const direction = new THREE.Vector3().subVectors(this.el.object3D.position, e.detail.body.el.object3D.position).normalize();
+          this.el.body.velocity.set(direction.x * 50000, direction.y * 500, direction.z * 500);
+        }
+      }
+    });
+
+    AFRAME.registerComponent('look-at-ball', {
+      tick: function () {
+        const ball = document.getElementById('tennisBall');
+        if (ball) {
+          const cameraRig = this.el;
+          cameraRig.object3D.lookAt(ball.object3D.position);
+        }
+      }
+    });
+
+    document.addEventListener('pointerlockchange', function () {
+      if (document.pointerLockElement === document.querySelector('canvas')) {
+        console.log('Pointer locked');
+      } else {
+        console.log('Pointer unlocked');
+      }
+    }, false);
+  </script>
 </body>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.138.1/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/GLTFLoader.js"></script>
-<script src="script.js"></script>
 </html>
