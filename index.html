@@ -22,12 +22,12 @@
     <a-entity id="cameraRig" position="0 1.6 0" movement-controls>
       <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
       <!-- Tennis racket with follow-mouse -->
-      <a-entity id="tennisRacket" gltf-model="#tennisRacketModel" follow-mouse position="0 0 -1"></a-entity>
+      <a-entity id="tennisRacket" gltf-model="#tennisRacketModel" follow-mouse></a-entity>
     </a-entity>
 
     <a-sky color="#87CEEB"></a-sky>
 
-    <a-entity id="tennisCourt" gltf-model="#tennisCourtModel" position="0 0 -5"></a-entity>
+    <a-entity id="tennisCourt" gltf-model="#tennisCourtModel" position="85 1.7 -5"></a-entity>
     <a-entity id="tennisBall" geometry="primitive: sphere; radius: 0.1" material="color: yellow" dynamic-body ball-controller position="0 1.5 -4"></a-entity>
   </a-scene>
 
@@ -53,9 +53,29 @@
         const cameraRig = document.getElementById('cameraRig');
         const position = new THREE.Vector3();
         
-        position.set(this.mouse.x * 20, -this.mouse.y * 20, -1).unproject(camera); // change sensitivity here
+        // Adjust sensitivity
+        const sensitivity = 0.002;
+        position.set(this.mouse.x * sensitivity, -this.mouse.y * sensitivity, -1).unproject(camera);
         position.add(cameraRig.object3D.position);
+        
+        // Clamp the racket position to keep it within the camera's view
+        const frustumSize = 10;  // Adjust this value to change the range
+        const halfFrustumWidth = frustumSize * camera.aspect / 2;
+        const halfFrustumHeight = frustumSize / 2;
+
+        position.x = THREE.MathUtils.clamp(position.x, cameraRig.object3D.position.x - halfFrustumWidth, cameraRig.object3D.position.x + halfFrustumWidth);
+        position.y = THREE.MathUtils.clamp(position.y, cameraRig.object3D.position.y - halfFrustumHeight, cameraRig.object3D.position.y + halfFrustumHeight);
+        
+        // Apply position to racket
         racket.object3D.position.copy(position);
+
+        // Apply rotation based on mouse position
+        const rotation = new THREE.Euler(
+          THREE.MathUtils.degToRad(THREE.MathUtils.clamp(this.mouse.y * sensitivity * 50, -45, 45)), // Rotation around X-axis
+          THREE.MathUtils.degToRad(THREE.MathUtils.clamp(this.mouse.x * sensitivity * 50, -45, 45)), // Rotation around Y-axis
+          0 // No rotation around Z-axis
+        );
+        racket.object3D.rotation.copy(rotation);
       }
     });
 
