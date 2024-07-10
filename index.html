@@ -17,18 +17,22 @@
       <!-- Load your GLTF models -->
       <a-asset-item id="tennisRacketModel" src="tennis_racket.glb"></a-asset-item>
       <a-asset-item id="tennisCourtModel" src="tennis_court.glb"></a-asset-item>
+      <a-asset-item id="tennisBallModel" src="tennis_ball.glb"></a-asset-item>
     </a-assets>
 
-    <a-entity id="cameraRig" position="0 1.6 0" movement-controls>
+    <!-- Camera and camera rig -->
+    <a-entity id="cameraRig" position="0 1.6 0" movement-controls look-at-ball>
       <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
       <!-- Tennis racket with follow-mouse -->
-      <a-entity id="tennisRacket" gltf-model="#tennisRacketModel" follow-mouse></a-entity>
+      <a-entity id="playerRacket" gltf-model="#tennisRacketModel" follow-mouse></a-entity>
+      <!-- AI opponent racket -->
+      <a-entity id="aiRacket" gltf-model="#tennisRacketModel" ai-opponent></a-entity>
     </a-entity>
 
     <a-sky color="#87CEEB"></a-sky>
 
     <a-entity id="tennisCourt" gltf-model="#tennisCourtModel" position="85 1.7 -5"></a-entity>
-    <a-entity id="tennisBall" geometry="primitive: sphere; radius: 0.1" material="color: yellow" dynamic-body ball-controller position="0 1.5 -4"></a-entity>
+    <a-entity id="tennisBall" gltf-model="#tennisBallModel" dynamic-body ball-controller position="0 1.5 -4"></a-entity>
   </a-scene>
 
   <script>
@@ -69,13 +73,19 @@
         // Apply position to racket
         racket.object3D.position.copy(position);
 
-        // Apply rotation based on mouse position
+        // Calculate rotation around the center of the racket and flip it vertically
         const rotation = new THREE.Euler(
-          THREE.MathUtils.degToRad(THREE.MathUtils.clamp(this.mouse.y * sensitivity * 50, -45, 45)), // Rotation around X-axis
+          THREE.MathUtils.degToRad(-THREE.MathUtils.clamp(this.mouse.y * sensitivity * 50, -45, 45)), // Rotation around X-axis (flipped vertically)
           THREE.MathUtils.degToRad(THREE.MathUtils.clamp(this.mouse.x * sensitivity * 50, -45, 45)), // Rotation around Y-axis
           0 // No rotation around Z-axis
         );
         racket.object3D.rotation.copy(rotation);
+
+        // Calculate the forward movement
+        const forwardMovement = new THREE.Vector3(0, 0, -1);
+        forwardMovement.applyEuler(rotation);
+        forwardMovement.multiplyScalar(0.05);  // Adjust the speed as needed
+        racket.object3D.position.add(forwardMovement);
       }
     });
 
@@ -84,7 +94,7 @@
         this.el.addEventListener('collide', this.onCollide.bind(this));
       },
       onCollide: function (e) {
-        if (e.detail.body.el.id === 'tennisRacket') {
+        if (e.detail.body.el.id === 'playerRacket' || e.detail.body.el.id === 'aiRacket') {
           const direction = new THREE.Vector3().subVectors(this.el.object3D.position, e.detail.body.el.object3D.position).normalize();
           this.el.body.velocity.set(direction.x * 50000, direction.y * 500, direction.z * 500);
         }
@@ -98,6 +108,37 @@
           const cameraRig = this.el;
           cameraRig.object3D.lookAt(ball.object3D.position);
         }
+      }
+    });
+
+    AFRAME.registerComponent('ai-opponent', {
+      init: function () {
+        this.speed = 0.05;  // Adjust the AI speed as needed
+        this.targetPosition = new THREE.Vector3();
+
+        // Initial position offset for AI racket
+        this.el.setAttribute('position', { x: 0, y: 1.6, z: -5 });
+
+        // Listen for ball movement and update AI position
+        const ball = document.getElementById('tennisBall');
+        if (ball) {
+          ball.addEventListener('componentchanged', (event) => {
+            if (event.detail.name === 'position') {
+              this.updateTargetPosition(ball.object3D.position);
+            }
+          });
+        }
+      },
+      updateTargetPosition: function (ballPosition) {
+        // Simple AI logic: Move towards the ball
+        this.targetPosition.copy(ballPosition);
+      },
+      tick: function () {
+        // Move AI racket towards the target position (ball position)
+        const currentPosition = this.el.object3D.position;
+        const direction = new THREE.Vector3().copy(this.targetPosition).sub(currentPosition).normalize();
+        const moveAmount = direction.multiplyScalar(this.speed);
+        this.el.object3D.position.add(moveAmount);
       }
     });
 
