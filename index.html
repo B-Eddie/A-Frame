@@ -21,8 +21,8 @@
     </a-assets>
 
     <!-- Camera and camera rig -->
-    <a-entity id="cameraRig" position="0 1.6 0" movement-controls look-at-ball>
-      <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
+    <a-entity id="cameraRig" position="0 1.6 0" movement-controls>
+      <a-entity camera look-controls wasd-controls position="0 1.6 0" look-at-ball></a-entity>
       <!-- Tennis racket with follow-mouse -->
       <a-entity id="playerRacket" gltf-model="#tennisRacketModel" follow-mouse></a-entity>
       <!-- AI opponent racket -->
@@ -31,8 +31,8 @@
 
     <a-sky color="#87CEEB"></a-sky>
 
-    <a-entity id="tennisCourt" gltf-model="#tennisCourtModel" position="85 1.7 -5"></a-entity>
-    <a-entity id="tennisBall" gltf-model="#tennisBallModel" dynamic-body ball-controller position="0 1.5 -4"></a-entity>
+    <a-entity id="tennisCourt" gltf-model="#tennisCourtModel" position="85 1 -5"></a-entity>
+    <a-entity id="tennisBall" gltf-model="#tennisBallModel" dynamic-body ball-controller position="-4 2 -5"></a-entity>
   </a-scene>
 
   <script>
@@ -52,40 +52,50 @@
         }
       },
       tick: function () {
-        const camera = this.el.sceneEl.camera;
-        const racket = this.el;
         const cameraRig = document.getElementById('cameraRig');
+        const racket = this.el;
         const position = new THREE.Vector3();
-        
+        const camera = cameraRig.querySelector('[camera]');
+
         // Adjust sensitivity
         const sensitivity = 0.002;
-        position.set(this.mouse.x * sensitivity, -this.mouse.y * sensitivity, -1).unproject(camera);
-        position.add(cameraRig.object3D.position);
-        
-        // Clamp the racket position to keep it within the camera's view
-        const frustumSize = 10;  // Adjust this value to change the range
-        const halfFrustumWidth = frustumSize * camera.aspect / 2;
-        const halfFrustumHeight = frustumSize / 2;
+        const maxRotation = Math.PI / 4; // 45 degrees in radians for vertical and horizontal limits
+        const maxWristRotation = Math.PI / 12; // 15 degrees in radians for wrist limit
 
-        position.x = THREE.MathUtils.clamp(position.x, cameraRig.object3D.position.x - halfFrustumWidth, cameraRig.object3D.position.x + halfFrustumWidth);
-        position.y = THREE.MathUtils.clamp(position.y, cameraRig.object3D.position.y - halfFrustumHeight, cameraRig.object3D.position.y + halfFrustumHeight);
-        
-        // Apply position to racket
-        racket.object3D.position.copy(position);
+        // Calculate horizontal rotation based on mouse x position
+        const horizontalRotation = THREE.MathUtils.mapLinear(this.mouse.x, -window.innerWidth / 2, window.innerWidth / 2, -maxRotation, maxRotation);
 
-        // Calculate rotation around the center of the racket and flip it vertically
-        const rotation = new THREE.Euler(
-          THREE.MathUtils.degToRad(-THREE.MathUtils.clamp(this.mouse.y * sensitivity * 50, -45, 45)), // Rotation around X-axis (flipped vertically)
-          THREE.MathUtils.degToRad(THREE.MathUtils.clamp(this.mouse.x * sensitivity * 50, -45, 45)), // Rotation around Y-axis
-          0 // No rotation around Z-axis
+        // Calculate vertical rotation based on mouse y position
+        const verticalRotation = THREE.MathUtils.mapLinear(this.mouse.y, -window.innerHeight / 2, window.innerHeight / 2, -maxRotation, maxRotation);
+
+        // Swap the top and bottom of the racket
+        const targetRotation = new THREE.Euler(
+          -verticalRotation, // Vertical rotation for up and down (inverted)
+          horizontalRotation + Math.PI, // Horizontal rotation from left to right (inverted with 180 degrees rotation)
+          0 // Keep Z rotation to simulate wrist limitation
         );
-        racket.object3D.rotation.copy(rotation);
 
-        // Calculate the forward movement
-        const forwardMovement = new THREE.Vector3(0, 0, -1);
-        forwardMovement.applyEuler(rotation);
-        forwardMovement.multiplyScalar(0.05);  // Adjust the speed as needed
-        racket.object3D.position.add(forwardMovement);
+        // Limit wrist rotation around the Z axis
+        const currentRotation = racket.object3D.rotation.z;
+        if (Math.abs(currentRotation) > maxWristRotation) {
+          targetRotation.z = currentRotation > 0 ? maxWristRotation : -maxWristRotation;
+        } else {
+          targetRotation.z = currentRotation;
+        }
+
+        // Convert Euler to Quaternion for smooth interpolation
+        const targetQuaternion = new THREE.Quaternion().setFromEuler(targetRotation);
+        // Smoothly interpolate rotation
+        racket.object3D.quaternion.slerp(targetQuaternion, 0.1); // Use a small factor like 0.1 for smoothness
+
+        // Calculate the position in front of the camera
+        const distance = 2; // Distance from the camera
+        position.set(-1, -1, -distance); // Adjust the position to be in front of the camera and below the camera level
+        position.applyQuaternion(camera.object3D.quaternion);
+        position.add(camera.object3D.position);
+
+        // Set the racket's position
+        racket.object3D.position.copy(position);
       }
     });
 
@@ -103,10 +113,11 @@
 
     AFRAME.registerComponent('look-at-ball', {
       tick: function () {
-        const ball = document.getElementById('tennisBall');
-        if (ball) {
+        const tennis_ball = document.getElementById('tennisBall');
+        if (tennis_ball) {
           const cameraRig = this.el;
-          cameraRig.object3D.lookAt(ball.object3D.position);
+          cameraRig.object3D.lookAt(tennis_ball.object3D.position);
+          cameraRig.object3D.rotation.y += 22;
         }
       }
     });
