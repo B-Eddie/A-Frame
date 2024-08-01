@@ -12,10 +12,10 @@
   </style>
 </head>
 <body>
-  <a-scene cursor="rayOrigin: mouse" physics="gravity: -9.8; debug: true">
+  <a-scene cursor="rayOrigin: mouse" physics="debug: true">
     <a-assets>
       <!-- Load your GLTF models -->
-      <a-asset-item id="tennisRacketModel" src="5.glb"></a-asset-item>
+      <a-asset-item id="tennisRacketModel" src="tennis_racket.glb"></a-asset-item>
       <a-asset-item id="tennisCourtModel" src="tennis_court.glb"></a-asset-item>
       <a-asset-item id="tennisBallModel" src="tennis_ball.glb"></a-asset-item>
     </a-assets>
@@ -24,18 +24,15 @@
     <a-entity id="cameraRig" position="0 1.6 0" movement-controls>
       <a-entity camera look-controls wasd-controls position="0 1.6 0" look-at-ball></a-entity>
       <!-- Tennis racket with follow-mouse -->
-      <a-entity id="playerRacket" gltf-model="#tennisRacketModel" follow-mouse static-body></a-entity>
+      <a-entity id="playerRacket" gltf-model="#tennisRacketModel" follow-mouse></a-entity>
       <!-- AI opponent racket -->
-      <a-entity id="aiRacket" gltf-model="#tennisRacketModel" ai-opponent static-body></a-entity>
+      <a-entity id="aiRacket" gltf-model="#tennisRacketModel" ai-opponent></a-entity>
     </a-entity>
 
     <a-sky color="#87CEEB"></a-sky>
 
-    <!-- Tennis court with physics body -->
-    <a-entity id="tennisCourt" gltf-model="#tennisCourtModel" static-body position="81 1 -5"></a-entity>
-
-    <!-- Tennis ball with dynamic body -->
-    <a-entity id="tennisBall" gltf-model="#tennisBallModel" dynamic-body="mass: 0.058; shape: sphere; sphereRadius: 0.067" ball-controller position="0 1.2 -5"></a-entity>
+    <a-entity id="tennisCourt" gltf-model="#tennisCourtModel" position="85 1 -5"></a-entity>
+    <a-entity id="tennisBall" gltf-model="#tennisBallModel" dynamic-body ball-controller position="-4 2 -5"></a-entity>
   </a-scene>
 
   <script>
@@ -55,62 +52,61 @@
         }
       },
       tick: function () {
-        const racket = this.el;
         const cameraRig = document.getElementById('cameraRig');
+        const racket = this.el;
+        const position = new THREE.Vector3();
         const camera = cameraRig.querySelector('[camera]');
 
+        // Adjust sensitivity
         const sensitivity = 0.002;
-        const maxRotation = Math.PI / 4;
+        const maxRotation = Math.PI / 4; // 45 degrees in radians for vertical and horizontal limits
+        const maxWristRotation = Math.PI / 12; // 15 degrees in radians for wrist limit
 
+        // Calculate horizontal rotation based on mouse x position
         const horizontalRotation = THREE.MathUtils.mapLinear(-this.mouse.x, -window.innerWidth / 2, window.innerWidth / 2, -maxRotation, maxRotation);
-        const verticalRotation = THREE.MathUtils.mapLinear(-this.mouse.y, -window.innerHeight / 2, window.innerHeight / 2, -maxRotation, maxRotation);
 
+        // Calculate vertical rotation based on mouse y position
+        const verticalRotation = THREE.MathUtils.mapLinear(this.mouse.y, -window.innerHeight / 2, window.innerHeight / 2, -maxRotation, maxRotation);
+
+        // Swap the top and bottom of the racket
         const targetRotation = new THREE.Euler(
-          verticalRotation,
-          horizontalRotation,
-          0
+          -verticalRotation, // Vertical rotation for up and down (inverted)
+          horizontalRotation + Math.PI, // Horizontal rotation from left to right (inverted with 180 degrees rotation)
+          0 // Keep Z rotation to simulate wrist limitation
         );
 
-        const targetQuaternion = new THREE.Quaternion().setFromEuler(targetRotation);
-        racket.object3D.quaternion.slerp(targetQuaternion, 0.1);
+        // Limit wrist rotation around the Z axis
+        const currentRotation = racket.object3D.rotation.z;
+        if (Math.abs(currentRotation) > maxWristRotation) {
+          targetRotation.z = currentRotation > 0 ? maxWristRotation : -maxWristRotation;
+        } else {
+          targetRotation.z = currentRotation;
+        }
 
-        const distance = 2;
-        const position = new THREE.Vector3(0, 0, -distance);
+        // Convert Euler to Quaternion for smooth interpolation
+        const targetQuaternion = new THREE.Quaternion().setFromEuler(targetRotation);
+        // Smoothly interpolate rotation
+        racket.object3D.quaternion.slerp(targetQuaternion, 0.1); // Use a small factor like 0.1 for smoothness
+
+        // Calculate the position in front of the camera
+        const distance = 2; // Distance from the camera
+        position.set(-1, -1, -distance); // Adjust the position to be in front of the camera and below the camera level
         position.applyQuaternion(camera.object3D.quaternion);
         position.add(camera.object3D.position);
 
+        // Set the racket's position
         racket.object3D.position.copy(position);
-
-        racket.object3D.rotation.set(
-          camera.object3D.rotation.x + verticalRotation,
-          camera.object3D.rotation.y + horizontalRotation,
-          0
-        );
       }
     });
 
     AFRAME.registerComponent('ball-controller', {
       init: function () {
         this.el.addEventListener('collide', this.onCollide.bind(this));
-        window.addEventListener('keydown', this.onKeyDown.bind(this));
       },
       onCollide: function (e) {
         if (e.detail.body.el.id === 'playerRacket' || e.detail.body.el.id === 'aiRacket') {
           const direction = new THREE.Vector3().subVectors(this.el.object3D.position, e.detail.body.el.object3D.position).normalize();
-          const hitStrength = 10;
-          this.el.body.applyImpulse(
-            new CANNON.Vec3(direction.x * hitStrength, direction.y * hitStrength, direction.z * hitStrength),
-            new CANNON.Vec3().copy(this.el.body.position)
-          );
-        }
-      },
-      onKeyDown: function (e) {
-        if (e.code === 'Space') {
-          const cameraRig = document.getElementById('cameraRig');
-          const cameraPosition = cameraRig.object3D.position;
-          this.el.setAttribute('position', { x: cameraPosition.x -100, y: cameraPosition.y + 22, z: cameraPosition.z });
-          this.el.body.position.set(cameraPosition.x, cameraPosition.y + 2, cameraPosition.z);
-          this.el.body.velocity.set(0, 0, 0);
+          this.el.body.velocity.set(direction.x * 50000, direction.y * 500, direction.z * 500);
         }
       }
     });
@@ -128,11 +124,13 @@
 
     AFRAME.registerComponent('ai-opponent', {
       init: function () {
-        this.speed = 0.05;
+        this.speed = 0.05;  // Adjust the AI speed as needed
         this.targetPosition = new THREE.Vector3();
 
+        // Initial position offset for AI racket
         this.el.setAttribute('position', { x: 0, y: 1.6, z: -5 });
 
+        // Listen for ball movement and update AI position
         const ball = document.getElementById('tennisBall');
         if (ball) {
           ball.addEventListener('componentchanged', (event) => {
@@ -143,9 +141,11 @@
         }
       },
       updateTargetPosition: function (ballPosition) {
+        // Simple AI logic: Move towards the ball
         this.targetPosition.copy(ballPosition);
       },
       tick: function () {
+        // Move AI racket towards the target position (ball position)
         const currentPosition = this.el.object3D.position;
         const direction = new THREE.Vector3().copy(this.targetPosition).sub(currentPosition).normalize();
         const moveAmount = direction.multiplyScalar(this.speed);
